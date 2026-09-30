@@ -23,3 +23,11 @@ Có thể dán thẳng các ô copy từ Google Sheets. Từ có chữ Hán đư
 
 Phát âm dùng giọng đọc có sẵn của trình duyệt. Nếu không nghe được tiếng Trung trên Windows:
 Settings → Time & language → Speech → thêm giọng *Chinese (Simplified)*.
+
+## Gõ tiếng Trung
+
+Ở bước 3, bấm vào ô của từ tiếng Trung sẽ hiện bàn phím pinyin: gõ pinyin không dấu (`gongzuo`) rồi chọn chữ Hán, hoặc nhấn phím cách để chọn chữ đầu tiên. Gõ số sau âm tiết để đặt dấu (`gong1zuo4` → gōngzuò). Tab **Bảng pinyin** có thanh mẫu, vận mẫu, thanh điệu kèm phát âm và cách đọc gần đúng bằng tiếng Việt.
+
+## Sao lưu
+
+Cài đặt → **Tải file sao lưu** lưu toàn bộ sổ ra file `.json`. Dùng **Khôi phục từ file** để nạp lại ở bản online hoặc bản offline (không cần tài khoản).

@@ -37,6 +37,7 @@
   --fold:#252a3a;--fold-2:#2c3244;--shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);color-scheme:dark}
 
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{background:var(--desk);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;margin:0}
 .wrap{max-width:1040px;margin:0 auto;padding-inline:16px;padding-block:20px 60px;display:flex;flex-direction:column;gap:18px}
 h1,h2,h3{margin:0;text-wrap:balance;line-height:1.25}
@@ -204,6 +205,29 @@ code.k{font-family:var(--f-mono);font-size:.8rem;background:var(--fold);padding:
 .banner{border-radius:10px;padding:12px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--blue-soft)}
 .banner.warn{background:var(--marker-soft)}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:10px;font-size:.9rem;box-shadow:var(--shadow);z-index:20;max-width:calc(100% - 32px)}
+/* Chinese on-screen keyboard + pinyin chart */
+.zhkb{position:fixed;left:0;right:0;bottom:0;z-index:15;background:var(--paper);border-top:2px solid var(--pen);box-shadow:0 -6px 24px rgba(20,30,60,.12);padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px}
+.zhkb .kb-in{max-width:1040px;margin:0 auto;width:100%;display:flex;flex-direction:column;gap:8px}
+.kb-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;min-width:0}
+.kb-buf{font-family:var(--f-mono);font-size:.9rem;color:var(--blue);min-width:56px}
+.kb-cands{display:flex;gap:6px;overflow-x:auto;flex:1;min-width:0;scrollbar-width:thin;padding-bottom:2px}
+.cand{flex:none;border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:4px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;line-height:1.15}
+.cand b{font-family:var(--f-zh);font-size:1.25rem;font-weight:600}
+.cand small{font-family:var(--f-mono);font-size:.68rem;color:var(--muted)}
+.cand:hover,.cand:first-child{border-color:var(--pen)}
+.kb-key{border:1px solid var(--line);background:var(--desk);border-radius:6px;min-width:38px;height:34px;padding:0 8px;cursor:pointer;font-family:var(--f-mono);font-size:.95rem}
+.kb-key:hover{border-color:var(--ink)}
+body.kb-open .wrap{padding-bottom:170px}
+body.kb-open .toast{bottom:150px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}
+.tile{border:1px solid var(--line);background:var(--paper);border-radius:10px;padding:8px 6px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:1px;text-align:center}
+.tile:hover{border-color:var(--pen)}
+.tile .py{font-family:var(--f-mono);font-weight:600;font-size:1.05rem;color:var(--pen)}
+.tile .hz{font-family:var(--f-zh);font-size:1.3rem}
+.tile .ex{font-family:var(--f-mono);font-size:.7rem;color:var(--muted)}
+.tile .vi{font-size:.7rem;color:var(--muted);line-height:1.2}
+.tones{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.tones>*{min-width:0}
 .confirm{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:.85rem}
 details summary{cursor:pointer;font-weight:600}
 @media (prefers-reduced-motion:no-preference){.btn,.step-tab,.mark{transition:all .15s}}
@@ -225,12 +249,14 @@ details summary{cursor:pointer;font-weight:600}
     <button role="tab" data-tab="import" aria-selected="false">Nhập từ vựng</button>
     <button role="tab" data-tab="notebook" aria-selected="false">Sổ chép riêng <span class="count" id="missCount" hidden>0</span></button>
     <button role="tab" data-tab="weekly" aria-selected="false">Ôn cuối tuần</button>
+    <button role="tab" data-tab="pinyin" aria-selected="false">Bảng pinyin</button>
     <button role="tab" data-tab="settings" aria-selected="false">Cài đặt</button>
   </nav>
 
   <main id="view"></main>
 </div>
 <div class="toast" id="toast" hidden></div>
+<div class="zhkb" id="zhkb" hidden></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pinyin-pro@3.26.0/dist/index.js"></script>
@@ -395,7 +421,7 @@ function missList(){
 
 /* ---------- app state ---------- */
 const state = { tab:"today", openUnit:null, viewStep:null, drafts:{}, reveal:{}, selfMarks:{}, confirm:null, parsed:null, deckName:"", quiz:null };
-function onData(local){ paintSaveState(); const n = missList().length; const mc = $("#missCount"); mc.textContent = n; mc.hidden = !n; if (!local || !isTyping()) render(); }
+function onData(local){ zhIdx = null; paintSaveState(); const n = missList().length; const mc = $("#missCount"); mc.textContent = n; mc.hidden = !n; if (!local || !isTyping()) render(); }
 const isTyping = () => document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
 
 /* ---------- views ---------- */
@@ -408,8 +434,11 @@ function render(){
   else if (state.tab === "import") v.innerHTML = viewImport();
   else if (state.tab === "notebook") v.innerHTML = viewNotebook();
   else if (state.tab === "weekly") v.innerHTML = viewWeekly();
+  else if (state.tab === "pinyin") v.innerHTML = viewPinyin();
   else v.innerHTML = viewSettings();
   if (focusId){ const el = document.getElementById(focusId); if (el) el.focus(); }
+  if (kb.el && !document.body.contains(kb.el)) kb.el = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.zh ? document.activeElement : null;
+  paintKb();
 }
 
 function viewToday(){
@@ -529,8 +558,8 @@ function viewSheet(){
   }[k];
   if (cur === 5 && state.viewStep === null) Object.assign(colState, {1:"show",2:"show",3:"show",4:"show"});
   const reviewAll = cur === 5 && state.viewStep === null;
-  const tmpl = ["34px"].concat([1,2,3,4].map(c => colState[c]==="fold" ? "26px" : colState[c]==="blank" ? "minmax(40px,.5fr)" : "minmax(150px,1fr)")).join(" ");
-  const minW = 34 + [1,2,3,4].reduce((s,c)=>s+(colState[c]==="fold"?26:colState[c]==="blank"?40:150),0);
+  const tmpl = ["34px"].concat([1,2,3,4].map(c => colState[c]==="fold" ? "26px" : colState[c]==="blank" ? "minmax(16px,.3fr)" : "minmax(140px,1fr)")).join(" ");
+  const minW = 34 + [1,2,3,4].reduce((s,c)=>s+(colState[c]==="fold"?26:colState[c]==="blank"?16:140),0);
   html += `<div class="a4"><div class="a4-scroll"><div class="sheet" style="grid-template-columns:${tmpl};min-width:${minW}px">`;
   html += `<div class="h n">#</div>`;
   for (let c=1;c<=4;c++) html += colState[c]==="fold" ? `<div class="h fold">đã gấp</div>` : `<div class="h">${STEP[c].col}${u.s[c]&&u.s[c].at&&c>1?` · <span class="mono">${u.s[c].ok.filter(Boolean).length}/${u.words.length}</span>`:""}</div>`;
@@ -593,8 +622,8 @@ function cellHTML(u, w, i, c, st, k, done, drafts, selfMode, sm, rv, reviewAll){
     const body = rv[i] ? `<div class="cell-stack" style="flex:1">${target}</div>` : `<button class="reveal" data-reveal="${i}">Hiện đáp án</button><span class="spacer"></span>`;
     return body + `<div class="grade"><button data-self="${i}" data-v="1" class="${sm[i]===1?"on-ok":""}" aria-label="Đúng">✓</button><button data-self="${i}" data-v="0" class="${sm[i]===0?"on-x":""}" aria-label="Sai">✗</button></div>`;
   }
-  const ph = isTermCol ? (w.lang === "zh" ? "chữ Hán / pinyin" : "viết từ") : "viết nghĩa";
-  return `<input class="answer-in" id="in-${esc(dk)}-${i}" data-ans="${i}" data-dk="${esc(dk)}" value="${esc(drafts[i]||"")}" placeholder="${ph}" autocomplete="off" autocapitalize="off" spellcheck="false" ${w.lang==="zh"&&isTermCol?'lang="zh"':""}>`;
+  const ph = isTermCol ? (w.lang === "zh" ? "gõ pinyin, chọn chữ" : "viết từ") : "viết nghĩa";
+  return `<input class="answer-in" id="in-${esc(dk)}-${i}" data-ans="${i}" data-dk="${esc(dk)}" value="${esc(drafts[i]||"")}" placeholder="${ph}" autocomplete="off" autocapitalize="off" spellcheck="false" ${w.lang==="zh"&&isTermCol?'lang="zh" data-zh="1"':""}>`;
 }
 function writtenCell(u, w, i, c, compact){
   const s = u.s[c]; if (!s) return "";
@@ -750,14 +779,32 @@ async function downloadTemplate(){
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), "Tu vung");
     data = new Uint8Array(XLSX.write(wb, { bookType:"xlsx", type:"array" })); filename = "mau-tu-vung.xlsx";
   } else { data = "\ufeff" + aoa.map(r => r.join(",")).join("\n"); filename = "mau-tu-vung.csv"; }
+  await saveFile(filename, data, "Đã lưu file mẫu.", "Không tải được. Tạo file với dòng đầu: Từ, Nghĩa, Phiên âm, Ngôn ngữ, Ví dụ");
+}
+async function saveFile(filename, data, okMsg, failMsg){
   try{
-    const dl = window.claude && await window.claude.use("downloads");
-    if (dl){ const r = await dl.save({ filename, data }); if (r && r.status === "saved") toast("Đã lưu file mẫu."); return; }
-  }catch(e){ if (e && e.code === "unavailable"){} else return; }
+    const dl = window.claude && typeof window.claude.use === "function" ? await window.claude.use("downloads") : null;
+    if (dl){ const r = await dl.save({ filename, data }); if (r && r.status === "saved") toast(okMsg); return; }
+  }catch(e){ if (!e || e.code !== "unavailable") return; }
   try{
-    const blob = data instanceof Uint8Array ? new Blob([data]) : new Blob([data], { type:"text/csv" });
+    const blob = new Blob([data]);
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
-  }catch(e){ toast("Không tải được. Tạo file với dòng đầu: Từ, Nghĩa, Phiên âm, Ngôn ngữ, Ví dụ"); }
+  }catch(e){ toast(failMsg); }
+}
+async function exportBackup(){
+  if (!store.units.length){ toast("Sổ đang trống, chưa có gì để sao lưu."); return; }
+  const data = JSON.stringify({ app:"so-tu-vung-a4", version:1, exportedAt:new Date().toISOString(), units:store.units });
+  await saveFile("so-tu-vung-" + todayKey() + ".json", data, "Đã lưu file sao lưu.", "Không tải được file sao lưu.");
+}
+async function importBackup(f){
+  try{
+    const j = JSON.parse(await f.text());
+    const units = (j && Array.isArray(j.units) ? j.units : []).filter(u => u && u.id && Array.isArray(u.words));
+    if (!units.length){ toast("File này không phải bản sao lưu của Sổ Từ Vựng A4."); return; }
+    for (const u of units){ u.s = u.s || {}; u.miss = u.miss || {}; }
+    await store.putMany(units);
+    toast(`Đã khôi phục ${units.length} unit.`);
+  }catch(e){ toast("Không đọc được file sao lưu."); }
 }
 
 /* ---------- flashcard quiz (notebook + weekly) ---------- */
@@ -840,7 +887,138 @@ function viewSettings(){
   </div>
   <div class="row"><button class="btn" data-speak="consistently" data-lang="en" data-times="1">Thử giọng Anh</button><button class="btn" data-speak="我们明天开会" data-lang="zh" data-times="1">Thử giọng Trung</button></div>
   ${zh.length?"":`<p class="small muted">Máy chưa có giọng tiếng Trung. Trên Windows: Cài đặt → Thời gian & ngôn ngữ → Giọng nói → Thêm giọng "Chinese (Simplified)". Chrome trên máy tính thường có sẵn giọng Google 普通话.</p>`}
-  <p class="small muted">${store.mode==="db"?"Tiến độ học được lưu riêng trong tài khoản Claude của bạn, mở ở máy khác vẫn còn. Người khác mở link này sẽ có sổ riêng của họ.":"Đang lưu trên trình duyệt này. Xoá dữ liệu trình duyệt sẽ mất tiến độ."}</p></div>`;
+  <p class="small muted">${store.mode==="db"?"Tiến độ học được lưu riêng trong tài khoản Claude của bạn, mở ở máy khác vẫn còn. Người khác mở link này sẽ có sổ riêng của họ.":"Đang lưu trên trình duyệt này. Xoá dữ liệu trình duyệt sẽ mất tiến độ."}</p></div>
+  <div class="panel"><h2>Sao lưu &amp; chuyển máy</h2>
+  <p class="small">Tải toàn bộ sổ (từ vựng, tiến độ, sổ chép riêng) về một file <code class="k">.json</code>. Dùng file này để khôi phục ở bản online hoặc bản offline trên máy khác. Nên sao lưu mỗi tuần.</p>
+  <div class="row"><button class="btn primary" data-act="backup">Tải file sao lưu</button><label class="btn" for="restoreFile">Khôi phục từ file</label><input type="file" id="restoreFile" accept=".json,application/json" hidden></div></div>`;
+}
+
+/* ---------- Chinese typing: pinyin -> characters from your own deck ---------- */
+const TONEV = { a:"āáǎà", e:"ēéěè", i:"īíǐì", o:"ōóǒò", u:"ūúǔù", v:"ǖǘǚǜ" };
+const SYL_RE = /(zh|ch|sh|[bpmfdtnlgkhjqxrzcsyw])?(?:(?:iang|iong|uang|ang|eng|ing|ong)(?![aeiouv])|(?:ian|uan|van|an|en|in|un|vn)(?![aeiouvg])|iao|uai|ai|ei|ao|ou|er|ia|ie|iu|ua|uo|ui|ve|a|o|e|i|u|v)/g;
+function segment(toneless){
+  const s = toneless.toLowerCase().replace(/ü/g,"v");
+  const out = []; let pos = 0; SYL_RE.lastIndex = 0; let m;
+  while ((m = SYL_RE.exec(s))){ if (m.index !== pos) return null; out.push(m[0]); pos += m[0].length; if (!m[0].length) return null; }
+  return pos === s.length ? out : null;
+}
+function addTone(raw, n){
+  let s = strip(raw.replace(/[ǖǘǚǜü]/g,"v")).toLowerCase().replace(/\d/g,"");
+  let idx = s.search(/[ae]/);
+  if (idx < 0 && s.includes("ou")) idx = s.indexOf("o");
+  if (idx < 0) for (let i = s.length-1; i >= 0; i--) if ("iouv".includes(s[i])){ idx = i; break; }
+  if (idx < 0) return raw;
+  return (s.slice(0, idx) + TONEV[s[idx]][n-1] + s.slice(idx+1)).replace(/v/g,"ü");
+}
+function charSyllables(w){
+  const chars = [...w.t];
+  if (window.pinyinPro){ try{ const a = window.pinyinPro.pinyin(w.t, { type:"array" }); if (a.length === chars.length) return a; }catch(e){} }
+  if (!w.r) return null;
+  const parts = w.r.trim().split(/[\s'’\-]+/).filter(Boolean);
+  if (parts.length === chars.length) return parts;
+  const seg = segment(normPinyin(w.r)); return seg && seg.length === chars.length ? seg : null;
+}
+let zhIdx = null;
+function zhIndex(){
+  if (zhIdx) return zhIdx;
+  const words = new Map(), chars = new Map();
+  for (const u of store.units) for (const w of u.words){
+    if (w.lang !== "zh") continue;
+    const r = w.r || (window.pinyinPro ? (()=>{ try{ return window.pinyinPro.pinyin(w.t); }catch(e){ return ""; } })() : "");
+    if (!words.has(w.t)) words.set(w.t, { t:w.t, r, key:normPinyin(r) });
+    const syl = charSyllables(Object.assign({}, w, { r }));
+    if (syl) [...w.t].forEach((c, i) => { if (/[㐀-鿿]/.test(c) && !chars.has(c)) chars.set(c, { t:c, r:syl[i], key:normPinyin(syl[i]) }); });
+  }
+  return zhIdx = { words:[...words.values()], chars:[...chars.values()] };
+}
+function candidates(buf){
+  const key = normPinyin(buf); if (!key) return [];
+  const { words, chars } = zhIndex(); const out = [], seen = new Set();
+  const add = x => { if (x.key && !seen.has(x.t)){ seen.add(x.t); out.push(x); } };
+  words.filter(w => w.key === key).forEach(add);
+  chars.filter(c => c.key === key).forEach(add);
+  words.filter(w => w.key.startsWith(key)).forEach(add);
+  chars.filter(c => c.key.startsWith(key)).forEach(add);
+  return out.slice(0, 14);
+}
+const kb = { el:null };
+const bufOf = v => (v.match(/[a-zA-ZüÜvāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ1-5']+$/) || [""])[0];
+function kbSet(value){
+  const el = kb.el; if (!el) return;
+  el.value = value; el.dispatchEvent(new Event("input", { bubbles:true }));
+  el.setSelectionRange(value.length, value.length);
+}
+function paintKb(){
+  const box = $("#zhkb");
+  if (!kb.el || !document.body.contains(kb.el)){ box.hidden = true; document.body.classList.remove("kb-open"); return; }
+  const buf = bufOf(kb.el.value), cs = candidates(buf);
+  box.hidden = false; document.body.classList.add("kb-open");
+  box.innerHTML = `<div class="kb-in">
+    <div class="kb-row"><span class="kb-buf">${buf ? esc(buf) : "pinyin…"}</span><div class="kb-cands">${
+      cs.length ? cs.map((c,i) => `<button class="cand" data-cand="${esc(c.t)}" title="${esc(c.r)}"><b>${esc(c.t)}</b><small>${esc(c.r)}</small></button>`).join("")
+      : `<span class="small muted">${buf ? "Không có chữ nào trong sổ khớp với “"+esc(buf)+"”. Kiểm tra lại pinyin, hoặc cứ để pinyin làm đáp án." : "Gõ pinyin không dấu (vd: gongzuo) rồi chọn chữ. Số 1-4 = dấu thanh."}</span>`}</div></div>
+    <div class="kb-row">${[1,2,3,4].map(n => `<button class="kb-key" data-tone="${n}" title="Thanh ${n}">${["ā","á","ǎ","à"][n-1]}</button>`).join("")}
+      <button class="kb-key" data-kbins="ü">ü</button><button class="kb-key" data-kbdel="1" aria-label="Xoá">⌫</button>
+      <span class="spacer"></span><button class="btn ghost sm" data-go="pinyin">Bảng pinyin</button><button class="btn ghost sm" data-kbclose="1">Ẩn</button></div></div>`;
+}
+document.addEventListener("focusin", e => { if (e.target.dataset && e.target.dataset.zh){ kb.el = e.target; paintKb(); } });
+document.addEventListener("focusout", e => {
+  if (e.target === kb.el) setTimeout(() => { if (document.activeElement !== kb.el){ const a = document.activeElement; if (!(a && a.dataset && a.dataset.zh)){ kb.el = null; paintKb(); } } }, 120);
+});
+// keep focus in the answer box while tapping the keyboard
+$("#zhkb").addEventListener("pointerdown", e => { if (e.target.closest("button")) e.preventDefault(); });
+$("#zhkb").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b || !kb.el) return;
+  if (b.dataset.go){ kb.el = null; return; }
+  const v = kb.el.value, buf = bufOf(v), d = b.dataset;
+  if (d.cand){ kbSet(v.slice(0, v.length - buf.length) + d.cand); }
+  else if (d.tone){
+    if (!buf) return;
+    const seg = segment(normPinyin(buf.replace(/[ǖǘǚǜ]/g,"ü")));
+    const L = seg ? seg[seg.length-1].length : buf.length;
+    const head = v.slice(0, v.length - L), last = v.slice(v.length - L);
+    kbSet(head + addTone(last, +d.tone));
+  }
+  else if (d.kbins) kbSet(v + d.kbins);
+  else if (d.kbdel) kbSet([...v].slice(0,-1).join(""));
+  else if (d.kbclose){ const el = kb.el; kb.el = null; paintKb(); el.blur(); return; }
+  kb.el.focus(); paintKb();
+});
+document.addEventListener("input", e => {
+  const el = e.target; if (!(el.dataset && el.dataset.zh)) return;
+  const m = el.value.match(/([a-zA-Zü]+)([1-4])$/);   // gong1 -> gōng
+  if (m){ const seg = segment(m[1].toLowerCase()); const last = seg ? seg[seg.length-1] : m[1];
+    const pre = el.value.slice(0, el.value.length - m[0].length) + m[1].slice(0, m[1].length - last.length);
+    el.value = pre + addTone(last, +m[2]); }
+  kb.el = el; paintKb();
+}, true);
+document.addEventListener("keydown", e => {
+  if (e.key === " " && kb.el && e.target === kb.el){
+    const c = candidates(bufOf(kb.el.value));
+    if (c.length){ e.preventDefault(); const v = kb.el.value; kbSet(v.slice(0, v.length - bufOf(v).length) + c[0].t); paintKb(); }
+  }
+}, true);
+
+/* ---------- pinyin chart ---------- */
+const INITIALS = [["b","八","bā","p nhẹ, không bật hơi"],["p","怕","pà","p bật hơi"],["m","妈","mā","m"],["f","发","fā","ph"],["d","大","dà","t, không bật hơi"],["t","他","tā","th bật hơi"],["n","你","nǐ","n"],["l","来","lái","l"],["g","哥","gē","c/k, không bật hơi"],["k","看","kàn","kh bật hơi"],["h","好","hǎo","h (gần kh)"],["j","家","jiā","ch (chi)"],["q","去","qù","ch bật hơi"],["x","下","xià","x"],["zh","中","zhōng","tr uốn lưỡi"],["ch","吃","chī","tr uốn lưỡi, bật hơi"],["sh","是","shì","s uốn lưỡi"],["r","日","rì","r nhẹ, uốn lưỡi"],["z","在","zài","ch đầu lưỡi (dz)"],["c","菜","cài","x bật hơi (ts)"],["s","四","sì","x"],["y","有","yǒu","d/i"],["w","我","wǒ","u/qu"]];
+const FINALS = [["a","啊","a","a"],["o","我","wǒ","ô-ua"],["e","饿","è","ưa"],["i","一","yī","i"],["u","五","wǔ","u"],["ü","鱼","yú","uy tròn môi"],["ai","爱","ài","ai"],["ei","黑","hēi","ây"],["ao","好","hǎo","ao"],["ou","欧","ōu","âu"],["an","安","ān","an"],["en","恩","ēn","ân"],["ang","忙","máng","ang"],["eng","冷","lěng","âng"],["ong","红","hóng","ung"],["er","二","èr","ơ uốn lưỡi"],["ia","家","jiā","ia"],["ie","谢","xiè","iê"],["iao","小","xiǎo","eo"],["iu","六","liù","iêu"],["ian","天","tiān","iên"],["in","心","xīn","in"],["iang","想","xiǎng","eng"],["ing","听","tīng","inh"],["iong","用","yòng","iung"],["ua","花","huā","oa"],["uo","多","duō","ua"],["uai","快","kuài","oai"],["ui","水","shuǐ","uây"],["uan","晚","wǎn","oan"],["un","春","chūn","uân"],["uang","黄","huáng","oang"],["üe","学","xué","uê"],["üan","远","yuǎn","oen"],["ün","云","yún","uyn"]];
+const TONE_ROWS = [["1","mā","妈","mẹ","Ngang, cao và đều (như thanh ngang tiếng Việt nhưng cao hơn)"],["2","má","麻","cây gai","Đi lên (giống dấu sắc)"],["3","mǎ","马","con ngựa","Xuống thấp rồi lên (giống dấu hỏi)"],["4","mà","骂","mắng","Rơi mạnh từ cao xuống (giống dấu huyền, dứt khoát)"],["0","ma","吗","trợ từ hỏi","Thanh nhẹ, đọc ngắn và nhẹ, không dấu"]];
+const tile = x => `<button class="tile" data-speak="${esc(x[1])}" data-lang="zh" data-times="1"><span class="py">${esc(x[0])}</span><span class="hz">${esc(x[1])}</span><span class="ex">${esc(x[2])}</span><span class="vi">≈ ${esc(x[3])}</span></button>`;
+function viewPinyin(){
+  return `<div class="panel"><h2>Bảng pinyin</h2>
+    <p class="small">Pinyin là "bảng chữ cái" để đọc và gõ tiếng Trung. Mỗi âm tiết = <b>thanh mẫu</b> (phụ âm đầu) + <b>vận mẫu</b> (vần) + <b>thanh điệu</b>. Bấm vào ô để nghe chữ ví dụ. Phần "≈" là cách đọc gần đúng bằng tiếng Việt.</p></div>
+  <div class="panel"><h3>Thanh điệu · 4 thanh + thanh nhẹ</h3><div class="tones">${TONE_ROWS.map(t => `<button class="tile" data-speak="${t[2]}" data-lang="zh" data-times="1"><span class="py">${t[1]}</span><span class="hz">${t[2]}</span><span class="ex">thanh ${t[0] === "0" ? "nhẹ" : t[0]} · ${t[3]}</span><span class="vi">${t[4]}</span></button>`).join("")}</div>
+    <p class="small muted">Dấu thanh đặt trên a hoặc e nếu có; với "ou" đặt trên o; còn lại đặt trên nguyên âm cuối (vd: guì, liù).</p></div>
+  <div class="panel"><h3>Thanh mẫu · 23 phụ âm đầu</h3><div class="tiles">${INITIALS.map(tile).join("")}</div></div>
+  <div class="panel"><h3>Vận mẫu · các vần</h3><div class="tiles">${FINALS.map(tile).join("")}</div>
+    <p class="small muted">Sau j, q, x, y thì ü viết thành u (ju, qu, xu, yu) nhưng vẫn đọc là ü. Khi gõ, dùng chữ <code class="k">v</code> thay cho ü (lv = lǜ).</p></div>
+  <div class="panel"><h3>Cách gõ trong sổ</h3>
+    <ol class="small" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px">
+      <li>Ở bước 3, bấm vào ô của từ tiếng Trung: bàn phím pinyin hiện ở cuối màn hình.</li>
+      <li>Gõ pinyin không dấu, ví dụ <code class="k">gongzuo</code>. Chữ Hán khớp trong sổ của bạn hiện ra, bấm để chọn, hoặc nhấn phím cách để chọn chữ đầu tiên.</li>
+      <li>Muốn trả lời bằng pinyin có dấu: gõ số sau âm tiết, <code class="k">gong1zuo4</code> thành <b>gōngzuò</b>. Pinyin không dấu cũng được tính đúng.</li>
+      <li>Muốn gõ tiếng Trung ở mọi nơi: Windows vào Settings → Time &amp; language → Language → Add a language → 中文(简体) để có bộ gõ Microsoft Pinyin, bấm <code class="k">Win + Space</code> để đổi. Điện thoại: cài Gboard và thêm ngôn ngữ Tiếng Trung (Pinyin).</li>
+    </ol></div>`;
 }
 
 /* ---------- actions ---------- */
@@ -908,6 +1086,7 @@ document.addEventListener("click", async e => {
   const act = d.act;
   if (act === "sample") return loadSample();
   if (act === "template") return downloadTemplate();
+  if (act === "backup") return exportBackup();
   if (act === "parsePaste"){ const txt = $("#paste").value; state.parsed = txt.trim() ? parseText(txt, "Bộ từ " + fmtDay(todayKey())) : null; if (!state.parsed || !state.parsed.rows.length){ state.parsed = null; toast("Chưa đọc được từ nào. Mỗi dòng cần có Từ và Nghĩa."); } render(); return; }
   if (act === "clearParsed"){ state.parsed = null; render(); return; }
   if (act === "create"){
@@ -937,6 +1116,7 @@ document.addEventListener("input", e => {
 document.addEventListener("change", e => {
   const el = e.target;
   if (el.id === "file" && el.files[0]) readFile(el.files[0]);
+  if (el.id === "restoreFile" && el.files[0]){ importBackup(el.files[0]); el.value = ""; }
   if (el.id === "set-mode"){ settings.mode = el.value; saveSettings(); }
   if (el.id === "set-en"){ settings.enVoice = el.value; saveSettings(); }
   if (el.id === "set-zh"){ settings.zhVoice = el.value; saveSettings(); }
