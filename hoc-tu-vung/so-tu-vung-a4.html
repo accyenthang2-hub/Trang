@@ -421,7 +421,8 @@ function missList(){
 
 /* ---------- app state ---------- */
 const state = { tab:"today", openUnit:null, viewStep:null, drafts:{}, reveal:{}, selfMarks:{}, confirm:null, parsed:null, deckName:"", quiz:null };
-function onData(local){ zhIdx = null; paintSaveState(); const n = missList().length; const mc = $("#missCount"); mc.textContent = n; mc.hidden = !n; if (!local || !isTyping()) render(); }
+let preloadDone = false;
+function onData(local){ if (!preloadDone){ preloadDone = true; setTimeout(applyPreload, 0); } zhIdx = null; paintSaveState(); const n = missList().length; const mc = $("#missCount"); mc.textContent = n; mc.hidden = !n; if (!local || !isTyping()) render(); }
 const isTyping = () => document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
 
 /* ---------- views ---------- */
@@ -805,6 +806,24 @@ async function importBackup(f){
     await store.putMany(units);
     toast(`Đã khôi phục ${units.length} unit.`);
   }catch(e){ toast("Không đọc được file sao lưu."); }
+}
+
+// A deck baked into the file (window.A4_PRELOAD) is imported once, on first open.
+async function applyPreload(){
+  const P = window.A4_PRELOAD;
+  if (!P || !Array.isArray(P.words) || !P.words.length) return;
+  const deck = String(P.deck || "Bộ từ đi kèm");
+  if (store.units.some(u => u.deck === deck) || ls("a4.preloaded." + deck)) return;
+  const rows = P.words.filter(w => w && w.t && w.m).map(w => {
+    const lang = w.lang === "zh" || w.lang === "en" ? w.lang : (hasCJK(w.t) ? "zh" : "en");
+    let r = w.r || "";
+    if (!r && lang === "zh" && window.pinyinPro){ try{ r = window.pinyinPro.pinyin(w.t); }catch(e){} }
+    return { t:String(w.t), m:String(w.m), r, lang, ex:w.ex || "" };
+  });
+  if (!rows.length) return;
+  ls("a4.preloaded." + deck, true);
+  const list = await createUnits(rows, deck, P.unitSize || settings.unitSize);
+  toast(`Đã nạp bộ "${deck}": ${rows.length} từ, ${list.length} unit.`);
 }
 
 /* ---------- flashcard quiz (notebook + weekly) ---------- */
